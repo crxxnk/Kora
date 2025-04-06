@@ -6,10 +6,6 @@
 
 #define CTRL_KEY(key) (key & 0x1f)
 
-int isCtrl(char c) {
-
-}
-
 struct termios orig;
 
 void enableRawMode() {
