@@ -57,7 +57,7 @@ This is a list of features and tasks for building the text editor in C.
 
 - [x] Enable and disable raw mode (Completed).
 - [ ] Handle user input and display text on the screen.
-- [ ] Implement the quit functionality
+- [x] Implement the quit functionality
 - [ ] Add support for basic text navigation
 - [ ] Implement text input and editing
 
