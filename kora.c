@@ -7,9 +7,13 @@
 #include <string.h>
 
 // Definitions
-#define CTRL_KEY(key) (key & 0x1f) // checks if the key pressed conflicts with ctrl
-#define CLEAR "\x1b[2J" // clear terminal
-#define MV_CUR_LT "\x1b[H" // move cursor left top
+#define CTRL_KEY(key) (key & 0x1f) // check if the key pressed conflicts with ctrl
+#define CLEAR "\x1b[2J"            // clear terminal
+#define CLEAR_LINE "\x1b[K"        // clear line
+#define MV_CUR_LT "\x1b[H"         // move cursor left top
+#define HIDE_CUR "\x1b[?25l"       // hide cursor
+#define SHOW_CUR "\x1b[?25h"       // show cursor
+#define KORA_VERSION "0.0.1"       // kora version
 
 struct append_buffer;
 struct term_settings;
@@ -37,7 +41,7 @@ struct term_settings settings;
 
 struct append_buffer {
     char* buf;
-    int len;
+    int   len;
 };
 
 /*
@@ -108,12 +112,13 @@ void clearScreen(){
 void refreshScreen() {
     struct append_buffer a_buf = {NULL, 0};
 
-    append(&a_buf, CLEAR, 4); // clears the terminal
+    append(&a_buf, HIDE_CUR, 6);
     append(&a_buf, MV_CUR_LT, 3); // moves the cursor to top left
 
     drawRows(&a_buf);
 
     append(&a_buf, MV_CUR_LT, 3); // moves the cursor to top left after drawing the rows
+    append(&a_buf, SHOW_CUR, 6);
 
     write(STDOUT_FILENO, a_buf.buf, a_buf.len);
     free(a_buf.buf);
@@ -139,8 +144,27 @@ void processInput() {
 
 void drawRows(struct append_buffer* a_buf) {
     for(int i = 0; i < settings.rows; i++) {
-        append(a_buf, "~", 1);
+        if(i == settings.rows / 2) { // draws in the center line
+            char msg[80];
+            int len = snprintf(msg, sizeof(msg), "Kora -- version %s", KORA_VERSION); // length of the message stored in msg
+            
+            if(len > settings.cols)
+                len = settings.cols;
 
+            int padding = (settings.cols - len) / 2; // draws in the center
+            
+            if(padding) // checks if padding is not 0 (in the far left of the screen so it can draw tildes)
+                append(a_buf, "~", 1);
+            
+                while(padding--)
+                append(a_buf, " ", 1); // adds the required spaces to center the msg
+            
+                append(a_buf, msg, len);
+        } else
+            append(a_buf, "~", 1);
+
+        append(a_buf, CLEAR_LINE, 3);
+        
         if(i < settings.rows - 1)
             append(a_buf, "\r\n", 2);
     }
