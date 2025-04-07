@@ -2,6 +2,8 @@
 
 A minimalist and efficient text editor built in C. It is designed for users who prefer simplicity and speed, providing basic functionality without unnecessary bloat.
 
+**NOTE** This text editor is mostly built for practice and learning. It's inspired by the kilo editor and has similar functionality(because I'm using its rendering methods, etc.) while also extending it to a stable and usable level.
+
 ## Features
 
 - **Minimalist design**: Focuses on text editing with no distractions.
