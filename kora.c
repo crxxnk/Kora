@@ -24,11 +24,11 @@ void refreshScreen();
 void err(const char* e);
 void enableRawMode();
 void disableRawMode();
-char readKey();
+int readKey();
 void processInput();
 void drawRows(struct append_buffer* a_buf);
 int getWindowSize(int* rows, int* cols);
-void moveCursor(char key);
+void moveCursor(int key);
 
 struct term_settings {
     struct termios def; // default terminal settings
@@ -46,6 +46,13 @@ struct term_settings settings;
 struct append_buffer {
     char* buf;
     int   len;
+};
+
+enum Keys {
+    ARROW_LEFT = 1000, // big integer index so it doesnt conflict with other chars/keys
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
 };
 
 /*
@@ -135,17 +142,33 @@ void refreshScreen() {
     free(a_buf.buf);
 }
 
-char readKey() {
+int readKey() { // return an int instead of a char because of the key enum
     char c;
 
     if(read(STDIN_FILENO, &c, 1) == -1)
         err("reading input");
     
+    if(c == '\x1b') {
+        char arr[3];
+        if(read(STDIN_FILENO, &arr[0], 1) != 1)
+            return '\x1b';
+        if(read(STDIN_FILENO, &arr[1], 1) != 1)
+            return '\x1b';
+        
+        if(arr[0] == '[') {
+            if(arr[1] == 'A') return ARROW_UP;
+            if(arr[1] == 'B') return ARROW_DOWN;
+            if(arr[1] == 'C') return ARROW_RIGHT;
+            if(arr[1] == 'D') return ARROW_LEFT;
+        }
+        return '\x1b';
+    }
+    
     return c;
 }
 
 void processInput() {
-    char key = readKey();
+    int key = readKey();
     switch(key) {
         case CTRL_KEY('q'):
             write(STDOUT_FILENO, CLEAR, 4); // clears the terminal
@@ -153,10 +176,10 @@ void processInput() {
             exit(0);
             break;
         
-        case 's':
-        case 'a':
-        case 'w':
-        case 'd':
+        case ARROW_UP:
+        case ARROW_LEFT:
+        case ARROW_DOWN:
+        case ARROW_RIGHT:
             moveCursor(key);
         break;
     }
@@ -199,19 +222,38 @@ int getWindowSize(int* rows, int* cols) {
     return 0;
 }
 
-void moveCursor(char key) {
+void moveCursor(int key) { // int instead of a char because of the key enum 
     switch (key) {
-    case 'a':
+    case ARROW_LEFT:
+        //TODO FIX ARROW LEFT
+        if(settings.cur_x <= 0) {
+            if(settings.cur_y <= 1) {
+                settings.cur_y = 0;
+                settings.cur_x = -1;
+            }
+            settings.cur_x = settings.cols;
+            settings.cur_y--;
+        }
         settings.cur_x--;
         break;
-    case 'd':
+    case ARROW_RIGHT:
+        if(settings.cur_x >= settings.cols - 1) {
+            if(settings.cur_y >= settings.rows - 1)
+                settings.cur_x = settings.cols - 2;
+            else {
+                settings.cur_y++;
+                settings.cur_x = -1;
+            }
+        }
         settings.cur_x++;
         break;
-    case 'w':
-        settings.cur_y--;
+    case ARROW_UP:
+        if(settings.cur_y >= 1)
+            settings.cur_y--;
         break;
-    case 's':
-        settings.cur_y++;
+    case ARROW_DOWN:
+        if(settings.cur_y < settings.rows - 1)
+            settings.cur_y++;
         break;
     }
 }
