@@ -28,6 +28,7 @@ char readKey();
 void processInput();
 void drawRows(struct append_buffer* a_buf);
 int getWindowSize(int* rows, int* cols);
+void moveCursor(char key);
 
 struct term_settings {
     struct termios def; // default terminal settings
@@ -35,6 +36,9 @@ struct term_settings {
     // terminal dimensions
     int rows;
     int cols;
+
+    int cur_x;
+    int cur_y;
 };
 
 struct term_settings settings;
@@ -100,6 +104,9 @@ void disableRawMode() {
 }
 
 void init() {
+    settings.cur_x = 0;
+    settings.cur_y = 0;
+
     if(getWindowSize(&settings.rows, &settings.cols) == -1)
         err("get window size");
 }
@@ -117,7 +124,11 @@ void refreshScreen() {
 
     drawRows(&a_buf);
 
-    append(&a_buf, MV_CUR_LT, 3); // moves the cursor to top left after drawing the rows
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", settings.cur_y + 1, settings.cur_x + 1);
+    append(&a_buf, buf, strlen(buf));
+
+    // append(&a_buf, MV_CUR_LT, 3); // moves the cursor to top left after drawing the rowsq
     append(&a_buf, SHOW_CUR, 6);
 
     write(STDOUT_FILENO, a_buf.buf, a_buf.len);
@@ -135,10 +146,19 @@ char readKey() {
 
 void processInput() {
     char key = readKey();
-    if(key == CTRL_KEY('q')) {
-        write(STDOUT_FILENO, CLEAR, 4); // clears the terminal
-        write(STDOUT_FILENO, MV_CUR_LT, 3); // moves the cursor to top left
-        exit(1);
+    switch(key) {
+        case CTRL_KEY('q'):
+            write(STDOUT_FILENO, CLEAR, 4); // clears the terminal
+            write(STDOUT_FILENO, MV_CUR_LT, 3); // moves the cursor to top left
+            exit(0);
+            break;
+        
+        case 's':
+        case 'a':
+        case 'w':
+        case 'd':
+            moveCursor(key);
+        break;
     }
 }
 
@@ -177,6 +197,23 @@ int getWindowSize(int* rows, int* cols) {
     *rows = win_size.ws_row;
     *cols = win_size.ws_col;
     return 0;
+}
+
+void moveCursor(char key) {
+    switch (key) {
+    case 'a':
+        settings.cur_x--;
+        break;
+    case 'd':
+        settings.cur_x++;
+        break;
+    case 'w':
+        settings.cur_y--;
+        break;
+    case 's':
+        settings.cur_y++;
+        break;
+    }
 }
 
 int main() {
