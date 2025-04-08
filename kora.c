@@ -52,7 +52,9 @@ enum Keys {
     ARROW_LEFT = 1000, // big integer index so it doesnt conflict with other chars/keys
     ARROW_RIGHT,
     ARROW_UP,
-    ARROW_DOWN
+    ARROW_DOWN,
+    PAGE_UP,
+    PAGE_DOWN
 };
 
 /*
@@ -156,10 +158,18 @@ int readKey() { // return an int instead of a char because of the key enum
             return '\x1b';
         
         if(arr[0] == '[') {
-            if(arr[1] == 'A') return ARROW_UP;
-            if(arr[1] == 'B') return ARROW_DOWN;
-            if(arr[1] == 'C') return ARROW_RIGHT;
-            if(arr[1] == 'D') return ARROW_LEFT;
+            if(arr[1] >= '0' && arr[1] <= '9') {
+                if(read(STDIN_FILENO, &arr[2], 1) != 1) return '\x1b';
+                if(arr[2] == '~') {
+                    if(arr[1] == '5') return PAGE_UP;
+                    if(arr[1] == '6') return PAGE_DOWN;
+                }
+            } else {
+                if(arr[1] == 'A') return ARROW_UP;
+                if(arr[1] == 'B') return ARROW_DOWN;
+                if(arr[1] == 'C') return ARROW_RIGHT;
+                if(arr[1] == 'D') return ARROW_LEFT;
+            }
         }
         return '\x1b';
     }
@@ -180,7 +190,10 @@ void processInput() {
         case ARROW_LEFT:
         case ARROW_DOWN:
         case ARROW_RIGHT:
+        case PAGE_UP:
+        case PAGE_DOWN:
             moveCursor(key);
+
         break;
     }
 }
@@ -255,6 +268,12 @@ void moveCursor(int key) { // int instead of a char because of the key enum
         if(settings.cur_y < settings.rows - 1)
             settings.cur_y++;
         break;
+    case PAGE_DOWN:
+        settings.cur_x = settings.cols - 1;
+        settings.cur_y = settings.rows - 1;
+    case PAGE_UP:
+        settings.cur_x = 0;
+        settings.cur_y = 0;
     }
 }
 
