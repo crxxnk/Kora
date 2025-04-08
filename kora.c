@@ -1,7 +1,11 @@
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <termios.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <ctype.h>
 #include <sys/ioctl.h>
 #include <string.h>
@@ -29,6 +33,13 @@ void processInput();
 void drawRows(struct append_buffer* a_buf);
 int getWindowSize(int* rows, int* cols);
 void moveCursor(int key);
+void open(char* filename);
+
+typedef struct tr {
+    int size;
+    char* buf;
+} txt_row;
+
 
 struct term_settings {
     struct termios def; // default terminal settings
@@ -39,6 +50,9 @@ struct term_settings {
 
     int cur_x;
     int cur_y;
+
+    int txt_rows;
+    txt_row row;
 };
 
 struct term_settings settings;
@@ -54,7 +68,10 @@ enum Keys {
     ARROW_UP,
     ARROW_DOWN,
     PAGE_UP,
-    PAGE_DOWN
+    PAGE_DOWN,
+    HOME_KEY,
+    END_KEY,
+    DEL_KEY
 };
 
 /*
@@ -113,6 +130,7 @@ void disableRawMode() {
 }
 
 void init() {
+    settings.txt_rows = 0;
     settings.cur_x = 0;
     settings.cur_y = 0;
 
@@ -161,15 +179,25 @@ int readKey() { // return an int instead of a char because of the key enum
             if(arr[1] >= '0' && arr[1] <= '9') {
                 if(read(STDIN_FILENO, &arr[2], 1) != 1) return '\x1b';
                 if(arr[2] == '~') {
+                    if(arr[1] == '1') return HOME_KEY;
+                    if(arr[1] == '3') return DEL_KEY;
+                    if(arr[1] == '4') return END_KEY;
                     if(arr[1] == '5') return PAGE_UP;
                     if(arr[1] == '6') return PAGE_DOWN;
+                    if(arr[1] == '7') return HOME_KEY;
+                    if(arr[1] == '8') return END_KEY;
                 }
             } else {
                 if(arr[1] == 'A') return ARROW_UP;
                 if(arr[1] == 'B') return ARROW_DOWN;
                 if(arr[1] == 'C') return ARROW_RIGHT;
                 if(arr[1] == 'D') return ARROW_LEFT;
+                if(arr[1] == 'H') return HOME_KEY;
+                if(arr[1] == 'F') return END_KEY;
             }
+        } else if(arr[0] == 'O') {
+            if(arr[1] == 'H') return HOME_KEY;
+            if(arr[1] == 'F') return END_KEY;
         }
         return '\x1b';
     }
@@ -192,6 +220,8 @@ void processInput() {
         case ARROW_RIGHT:
         case PAGE_UP:
         case PAGE_DOWN:
+        case HOME_KEY:
+        case END_KEY:
             moveCursor(key);
 
         break;
@@ -200,27 +230,32 @@ void processInput() {
 
 void drawRows(struct append_buffer* a_buf) {
     for(int i = 0; i < settings.rows; i++) {
-        if(i == settings.rows / 2) { // draws in the center line
-            char msg[80];
-            int len = snprintf(msg, sizeof(msg), "Kora -- version %s", KORA_VERSION); // length of the message stored in msg
-            
-            if(len > settings.cols)
-                len = settings.cols;
-
-            int padding = (settings.cols - len) / 2; // draws in the center
-            
-            if(padding) // checks if padding is not 0 (in the far left of the screen so it can draw tildes)
+        if(i >= settings.txt_rows) {
+            if(i == settings.rows / 2) { // draws in the center line
+                char msg[80];
+                int len = snprintf(msg, sizeof(msg), "Kora -- version %s", KORA_VERSION); // length of the message stored in msg
+                
+                if(len > settings.cols)
+                    len = settings.cols;
+    
+                int padding = (settings.cols - len) / 2; // draws in the center
+                
+                if(padding) // checks if padding is not 0 (in the far left of the screen so it can draw tildes)
+                    append(a_buf, "~", 1);
+                
+                    while(padding--)
+                    append(a_buf, " ", 1); // adds the required spaces to center the msg
+                
+                    append(a_buf, msg, len);
+            } else
                 append(a_buf, "~", 1);
-            
-                while(padding--)
-                append(a_buf, " ", 1); // adds the required spaces to center the msg
-            
-                append(a_buf, msg, len);
-        } else
-            append(a_buf, "~", 1);
+        } else {
+            int len = settings.row.size;
+            if(len > settings.cols) len = settings.cols;
+            append(a_buf, settings.row.buf, len);
+        }
 
         append(a_buf, CLEAR_LINE, 3);
-        
         if(i < settings.rows - 1)
             append(a_buf, "\r\n", 2);
     }
@@ -271,15 +306,48 @@ void moveCursor(int key) { // int instead of a char because of the key enum
     case PAGE_DOWN:
         settings.cur_x = settings.cols - 1;
         settings.cur_y = settings.rows - 1;
+        break;
     case PAGE_UP:
         settings.cur_x = 0;
         settings.cur_y = 0;
+        break;
+    case HOME_KEY:
+        settings.cur_x = 0;
+        break;
+    case END_KEY:
+        settings.cur_x = settings.cols -1;
+        break;
     }
 }
 
-int main() {
+void open(char* filename) {
+    FILE* file = fopen(filename, "r"); // open file in reading mode
+    if(!file) err("open file");
+
+    char* txt = NULL;
+    size_t linecap = 0;
+    ssize_t len;
+
+    len = getline(&txt, &linecap, file);
+    if(len != -1) {
+        while(len > 0 && (txt[len - 1] == '\n' || txt[len - 1] == '\r'))
+            len--;
+        settings.row.size = len;
+        settings.row.buf = malloc(len + 1);
+        memcpy(settings.row.buf, txt, len);
+        settings.row.buf[len] = '\0';
+        settings.txt_rows = 1;
+    }
+    free(txt);
+    fclose(file);
+}
+
+int main(int argc, char* argv[]) {
     enableRawMode();
     init();
+    if(argc >= 2)
+        open(argv[1]);
+
     while(1) {
         refreshScreen();
         processInput();
